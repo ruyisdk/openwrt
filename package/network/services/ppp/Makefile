@@ -184,7 +184,6 @@ $(call Build/Configure/Default,, \
 	mkdir -p $(PKG_BUILD_DIR)/pppd/plugins/pppoatm/linux
 	$(CP) \
 		$(LINUX_DIR)/include/linux/compiler.h \
-		$(LINUX_DIR)/include/$(LINUX_UAPI_DIR)linux/atm*.h \
 		$(PKG_BUILD_DIR)/pppd/plugins/pppoatm/linux/
 
 	# Kernel 4.14.9+ only, ignore the exit status of cp in case the file
