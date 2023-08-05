@@ -16,7 +16,7 @@ define Image/BuildKernel
 	$(CP) light_aon_fpga.bin $@.boot/light_aon_fpga.bin
 	$(CP) light_c906_audio.bin $@.boot/light_c906_audio.bin
 	
-	rm $(KDIR)/boot.ext4
+	rm -f $(KDIR)/boot.ext4
 	mkfs.ext4 -d $@.boot -L "boot" $(KDIR)/boot.ext4 "57M"
 endef
 
