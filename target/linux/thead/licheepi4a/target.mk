@@ -2,4 +2,4 @@ include $(TOPDIR)/rules.mk
 
 BOARDNAME:=Sipeed Lichee Pi 4A
 DTSDIR:=thead
-DTSNAME:=light-lpi4a
+DTSNAMES:=light-lpi4a light-lpi4a-16gb

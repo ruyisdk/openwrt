@@ -6,16 +6,17 @@ include $(INCLUDE_DIR)/image.mk
 define Image/BuildKernel
 	rm -fR $@.boot
 	mkdir -p $@.boot
-	
-	$(CP) $(DTS_DIR)/$(DTSDIR)/$(DTSNAME).dtb $@.boot/light-lpi4a.dtb
+
+	$(foreach dts,$(DTSNAMES), $(CP) $(DTS_DIR)/$(DTSDIR)/$(dts).dtb $@.boot/$(dts).dtb;)
+
 	$(CP) $(KDIR)/Image $@.boot/kernel.img
-	
+
 	mkdir -p $@.boot/extlinux
 	$(CP) extlinux.conf $@.boot/extlinux/extlinux.conf
 	$(CP) fw_dynamic.bin $@.boot/fw_dynamic.bin
 	$(CP) light_aon_fpga.bin $@.boot/light_aon_fpga.bin
 	$(CP) light_c906_audio.bin $@.boot/light_c906_audio.bin
-	
+
 	rm -f $(KDIR)/boot.ext4
 	mkfs.ext4 -d $@.boot -L "boot" $(KDIR)/boot.ext4 "57M"
 endef
