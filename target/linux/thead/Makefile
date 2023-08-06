@@ -10,7 +10,7 @@ BOARD:=thead
 BOARDNAME:=T-Head RISC-V boards
 FEATURES:=ext4
 KERNELNAME:=Image dtbs
-SUBTARGETS:=licheepi4a
+SUBTARGETS:=licheepi4a ahead
 
 KERNEL_PATCHVER:=5.10
 
