@@ -1,0 +1,76 @@
+From ec953839a46e20cf1d9608bf859abe8a6dbc36dd Mon Sep 17 00:00:00 2001
+From: Emil Renner Berthing <emil.renner.berthing@canonical.com>
+Date: Wed, 3 Jan 2024 14:28:41 +0100
+Subject: [PATCH 006/129] riscv: dts: thead: Add TH1520 GPIO ranges
+
+Add gpio-ranges properties to the TH1520 device tree, so user space can
+change basic pinconf settings for GPIOs and are not allowed to use pads
+already used by other functions.
+
+Adjust number of GPIOs available for the different controllers.
+
+Signed-off-by: Emil Renner Berthing <emil.renner.berthing@canonical.com>
+Link: https://lore.kernel.org/r/20240103132852.298964-5-emil.renner.berthing@canonical.com
+Signed-off-by: Han Gao <gaohan@iscas.ac.cn>
+---
+ arch/riscv/boot/dts/thead/th1520.dtsi | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+--- a/arch/riscv/boot/dts/thead/th1520.dtsi
++++ b/arch/riscv/boot/dts/thead/th1520.dtsi
+@@ -210,7 +210,8 @@
+ 				compatible = "snps,dw-apb-gpio-port";
+ 				gpio-controller;
+ 				#gpio-cells = <2>;
+-				ngpios = <32>;
++				ngpios = <31>;
++				gpio-ranges = <&padctrl1_apsys 0 32 31>;
+ 				reg = <0>;
+ 				interrupt-controller;
+ 				#interrupt-cells = <2>;
+@@ -229,6 +230,7 @@
+ 				gpio-controller;
+ 				#gpio-cells = <2>;
+ 				ngpios = <32>;
++				gpio-ranges = <&padctrl0_apsys 0 0 32>;
+ 				reg = <0>;
+ 				interrupt-controller;
+ 				#interrupt-cells = <2>;
+@@ -252,7 +254,8 @@
+ 				compatible = "snps,dw-apb-gpio-port";
+ 				gpio-controller;
+ 				#gpio-cells = <2>;
+-				ngpios = <32>;
++				ngpios = <23>;
++				gpio-ranges = <&padctrl0_apsys 0 32 23>;
+ 				reg = <0>;
+ 				interrupt-controller;
+ 				#interrupt-cells = <2>;
+@@ -271,6 +274,7 @@
+ 				gpio-controller;
+ 				#gpio-cells = <2>;
+ 				ngpios = <32>;
++				gpio-ranges = <&padctrl1_apsys 0 0 32>;
+ 				reg = <0>;
+ 				interrupt-controller;
+ 				#interrupt-cells = <2>;
+@@ -412,7 +416,8 @@
+ 				compatible = "snps,dw-apb-gpio-port";
+ 				gpio-controller;
+ 				#gpio-cells = <2>;
+-				ngpios = <32>;
++				ngpios = <23>;
++				gpio-ranges = <&padctrl_aosys 0 25 22>, <&padctrl_aosys 22 7 1>;
+ 				reg = <0>;
+ 				interrupt-controller;
+ 				#interrupt-cells = <2>;
+@@ -436,7 +441,8 @@
+ 				compatible = "snps,dw-apb-gpio-port";
+ 				gpio-controller;
+ 				#gpio-cells = <2>;
+-				ngpios = <32>;
++				ngpios = <16>;
++				gpio-ranges = <&padctrl_aosys 0 9 16>;
+ 				reg = <0>;
+ 				interrupt-controller;
+ 				#interrupt-cells = <2>;

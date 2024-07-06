@@ -1,0 +1,465 @@
+From 107108e7b1e2229d757d05a141f55acb95e283b1 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko.stuebner@vrull.eu>
+Date: Mon, 18 Mar 2024 22:07:16 +0800
+Subject: [PATCH 001/129] T-Head C9xx cores implement an older version (0.7.1)
+ of the vector specification.
+
+Relevant changes concerning the kernel are:
+- different placement of the SR_VS bit for the vector unit status
+- different encoding of the vsetvli instruction
+- different instructions for loads and stores
+
+And a fixed VLEN of 128.
+
+The in-kernel access to vector instances is limited to the save and
+restore of process states so the above mentioned areas can simply be
+handled via the alternatives framework, similar to other T-Head specific
+issues.
+
+TODO:
+FIXME: Do real vstate discard in __riscv_v_vstate_discard!
+
+Signed-off-by: Heiko Stuebner <heiko.stuebner@vrull.eu>
+Co-developed-by: Guo Ren <guoren@kernel.org>
+Signed-off-by: Guo Ren <guoren@kernel.org>
+Tested-by: Chen Pei <cp0613@linux.alibaba.com>
+Signed-off-by: Chen Pei <cp0613@linux.alibaba.com>
+---
+ arch/riscv/Kconfig.errata            |  13 +++
+ arch/riscv/errata/thead/errata.c     |  20 ++++
+ arch/riscv/include/asm/csr.h         |  12 ++-
+ arch/riscv/include/asm/errata_list.h |  46 ++++++++-
+ arch/riscv/include/asm/vector.h      | 136 ++++++++++++++++++++++-----
+ arch/riscv/kernel/vector.c           |   8 ++
+ 6 files changed, 212 insertions(+), 23 deletions(-)
+
+--- a/arch/riscv/Kconfig.errata
++++ b/arch/riscv/Kconfig.errata
+@@ -99,4 +99,17 @@ config ERRATA_THEAD_PMU
+ 
+ 	  If you don't know what to do here, say "Y".
+ 
++config ERRATA_THEAD_VECTOR
++	bool "Apply T-Head Vector errata"
++	depends on ERRATA_THEAD && RISCV_ISA_V && !ARCH_RV32I
++	default y
++	help
++	  The T-Head C9xx cores implement an earlier version 0.7.1
++	  of the vector extensions.
++
++	  This will apply the necessary errata to handle the non-standard
++	  behaviour via when switch to and from vector mode for processes.
++
++	  If you don't know what to do here, say "Y".
++
+ endmenu # "CPU errata selection"
+--- a/arch/riscv/errata/thead/errata.c
++++ b/arch/riscv/errata/thead/errata.c
+@@ -15,6 +15,7 @@
+ #include <asm/errata_list.h>
+ #include <asm/hwprobe.h>
+ #include <asm/patch.h>
++#include <asm/vector.h>
+ #include <asm/vendorid_list.h>
+ 
+ static bool errata_probe_pbmt(unsigned int stage,
+@@ -33,6 +34,22 @@ static bool errata_probe_pbmt(unsigned i
+ 	return false;
+ }
+ 
++static bool errata_probe_vector(unsigned int stage,
++		unsigned long arch_id, unsigned long impid)
++{
++	if (!IS_ENABLED(CONFIG_ERRATA_THEAD_VECTOR))
++		return false;
++
++	/* target-c9xx cores report arch_id and impid as 0 */
++	if (arch_id != 0 || impid != 0)
++		return false;
++
++	if (stage == RISCV_ALTERNATIVES_EARLY_BOOT)
++		return false;
++
++	return true;
++}
++
+ static bool errata_probe_cmo(unsigned int stage,
+ 			     unsigned long arch_id, unsigned long impid)
+ {
+@@ -83,6 +100,9 @@ static u32 thead_errata_probe(unsigned i
+ 	if (errata_probe_pmu(stage, archid, impid))
+ 		cpu_req_errata |= BIT(ERRATA_THEAD_PMU);
+ 
++	if (errata_probe_vector(stage, archid, impid))
++		cpu_req_errata |= BIT(ERRATA_THEAD_VECTOR);
++
+ 	return cpu_req_errata;
+ }
+ 
+--- a/arch/riscv/include/asm/csr.h
++++ b/arch/riscv/include/asm/csr.h
+@@ -36,7 +36,17 @@
+ #define SR_XS_CLEAN	_AC(0x00010000, UL)
+ #define SR_XS_DIRTY	_AC(0x00018000, UL)
+ 
+-#define SR_FS_VS	(SR_FS | SR_VS) /* Vector and Floating-Point Unit */
++#define SR_VS_THEAD	_AC(0x01800000, UL) /* Vector Status */
++#define SR_VS_OFF_THEAD	_AC(0x00000000, UL)
++#define SR_VS_INITIAL_THEAD _AC(0x00800000, UL)
++#define SR_VS_CLEAN_THEAD _AC(0x01000000, UL)
++#define SR_VS_DIRTY_THEAD _AC(0x01800000, UL)
++/* VCSR flags */
++#define VCSR_VXRM_MASK			3
++#define VCSR_VXRM_SHIFT			1
++#define VCSR_VXSAT_MASK			1
++
++#define SR_FS_VS	(SR_FS | SR_VS | SR_VS_THEAD) /* Vector and Floating-Point Unit */
+ 
+ #ifndef CONFIG_64BIT
+ #define SR_SD		_AC(0x80000000, UL) /* FS/VS/XS dirty */
+--- a/arch/riscv/include/asm/errata_list.h
++++ b/arch/riscv/include/asm/errata_list.h
+@@ -26,7 +26,8 @@
+ #define	ERRATA_THEAD_PBMT 0
+ #define	ERRATA_THEAD_CMO 1
+ #define	ERRATA_THEAD_PMU 2
+-#define	ERRATA_THEAD_NUMBER 3
++#define ERRATA_THEAD_VECTOR 3
++#define	ERRATA_THEAD_NUMBER 4
+ #endif
+ 
+ #ifdef __ASSEMBLY__
+@@ -159,6 +160,49 @@ asm volatile(ALTERNATIVE(						\
+ 	: "=r" (__ovl) :						\
+ 	: "memory")
+ 
++#define THEAD_C9XX_CSR_VXSAT			0x9
++#define THEAD_C9XX_CSR_VXRM			0xa
++
++	/*
++	 * Vector 0.7.1 as used for example on T-Head Xuantie cores, uses an older
++	 * encoding for vsetvli (ta, ma vs. d1), so provide an instruction for
++	 * vsetvli	t4, x0, e8, m8, d1
++	 */
++#define THEAD_VSETVLI_T4X0E8M8D1	".long	0x00307ed7\n\t"
++
++	/*
++	 * While in theory, the vector-0.7.1 vsb.v and vlb.v result in the same
++	 * encoding as the standard vse8.v and vle8.v, compilers seem to optimize
++	 * the call resulting in a different encoding and then using a value for
++	 * the "mop" field that is not part of vector-0.7.1
++	 * So encode specific variants for vstate_save and _restore.
++	 */
++#define THEAD_VSB_V_V0T0		".long	0x02028027\n\t"
++#define THEAD_VSB_V_V8T0		".long	0x02028427\n\t"
++#define THEAD_VSB_V_V16T0		".long	0x02028827\n\t"
++#define THEAD_VSB_V_V24T0		".long	0x02028c27\n\t"
++#define THEAD_VLB_V_V0T0		".long	0x012028007\n\t"
++#define THEAD_VLB_V_V8T0		".long	0x012028407\n\t"
++#define THEAD_VLB_V_V16T0		".long	0x012028807\n\t"
++#define THEAD_VLB_V_V24T0		".long	0x012028c07\n\t"
++
++#define ALT_SR_VS_VECTOR_1_0_SHIFT	9
++#define ALT_SR_VS_THEAD_SHIFT		23
++
++#ifdef CONFIG_ERRATA_THEAD_VECTOR
++#define ALT_SR_VS(_val, prot)							\
++	asm(ALTERNATIVE("li %0, %1\t\nslli %0,%0,%3",				\
++			"li %0, %2\t\nslli %0,%0,%4", THEAD_VENDOR_ID,		\
++			ERRATA_THEAD_VECTOR, CONFIG_ERRATA_THEAD_VECTOR)	\
++			: "=r"(_val)						\
++			: "I"(prot >> ALT_SR_VS_VECTOR_1_0_SHIFT),		\
++			  "I"(prot##_THEAD >> ALT_SR_VS_THEAD_SHIFT),		\
++			  "I"(ALT_SR_VS_VECTOR_1_0_SHIFT),			\
++			  "I"(ALT_SR_VS_THEAD_SHIFT))
++#else
++#define ALT_SR_VS(_val, prot) _val = prot;
++#endif /* CONFIG_ERRATA_THEAD_VECTOR */
++
+ #endif /* __ASSEMBLY__ */
+ 
+ #endif
+--- a/arch/riscv/include/asm/vector.h
++++ b/arch/riscv/include/asm/vector.h
+@@ -18,6 +18,7 @@
+ #include <asm/hwcap.h>
+ #include <asm/csr.h>
+ #include <asm/asm.h>
++#include <asm/errata_list.h>
+ 
+ extern unsigned long riscv_v_vsize;
+ int riscv_v_setup_vsize(void);
+@@ -30,62 +31,117 @@ static __always_inline bool has_vector(v
+ 
+ static inline void __riscv_v_vstate_clean(struct pt_regs *regs)
+ {
+-	regs->status = (regs->status & ~SR_VS) | SR_VS_CLEAN;
++	unsigned long sr_vs, sr_vs_clean;
++
++	ALT_SR_VS(sr_vs, SR_VS);
++	ALT_SR_VS(sr_vs_clean, SR_VS_CLEAN);
++
++	regs->status = (regs->status & ~sr_vs) | sr_vs_clean;
+ }
+ 
+ static inline void __riscv_v_vstate_dirty(struct pt_regs *regs)
+ {
+-	regs->status = (regs->status & ~SR_VS) | SR_VS_DIRTY;
++	unsigned long sr_vs, sr_vs_dirty;
++
++	ALT_SR_VS(sr_vs, SR_VS);
++	ALT_SR_VS(sr_vs_dirty, SR_VS_DIRTY);
++
++	regs->status = (regs->status & ~sr_vs) | sr_vs_dirty;
+ }
+ 
+ static inline void riscv_v_vstate_off(struct pt_regs *regs)
+ {
+ 	regs->status = (regs->status & ~SR_VS) | SR_VS_OFF;
++	regs->status = (regs->status & ~SR_VS_THEAD) | SR_VS_OFF_THEAD;
+ }
+ 
+ static inline void riscv_v_vstate_on(struct pt_regs *regs)
+ {
+-	regs->status = (regs->status & ~SR_VS) | SR_VS_INITIAL;
++	unsigned long sr_vs, sr_vs_initial;
++
++	ALT_SR_VS(sr_vs, SR_VS);
++	ALT_SR_VS(sr_vs_initial, SR_VS_INITIAL);
++
++	regs->status = (regs->status & ~sr_vs) | sr_vs_initial;
+ }
+ 
+ static inline bool riscv_v_vstate_query(struct pt_regs *regs)
+ {
+-	return (regs->status & SR_VS) != 0;
++	unsigned long sr_vs;
++
++	ALT_SR_VS(sr_vs, SR_VS);
++
++	return (regs->status & sr_vs) != 0;
+ }
+ 
+ static __always_inline void riscv_v_enable(void)
+ {
+-	csr_set(CSR_SSTATUS, SR_VS);
++	unsigned long sr_vs;
++
++	ALT_SR_VS(sr_vs, SR_VS);
++
++	csr_set(CSR_SSTATUS, sr_vs);
+ }
+ 
+ static __always_inline void riscv_v_disable(void)
+ {
+-	csr_clear(CSR_SSTATUS, SR_VS);
++	csr_clear(CSR_SSTATUS, SR_VS | SR_VS_THEAD);
+ }
+ 
+ static __always_inline void __vstate_csr_save(struct __riscv_v_ext_state *dest)
+ {
+-	asm volatile (
++	register u32 t1 asm("t1") = (SR_FS);
++
++	asm volatile (ALTERNATIVE(
+ 		"csrr	%0, " __stringify(CSR_VSTART) "\n\t"
+ 		"csrr	%1, " __stringify(CSR_VTYPE) "\n\t"
+ 		"csrr	%2, " __stringify(CSR_VL) "\n\t"
+ 		"csrr	%3, " __stringify(CSR_VCSR) "\n\t"
+ 		"csrr	%4, " __stringify(CSR_VLENB) "\n\t"
++		__nops(4),
++		"csrs	sstatus, t1\n\t"
++		"csrr	%0, " __stringify(CSR_VSTART) "\n\t"
++		"csrr	%1, " __stringify(CSR_VTYPE) "\n\t"
++		"csrr	%2, " __stringify(CSR_VL) "\n\t"
++		"csrr	%3, " __stringify(THEAD_C9XX_CSR_VXRM) "\n\t"
++		"slliw	%3, %3, " __stringify(VCSR_VXRM_SHIFT) "\n\t"
++		"csrr	t4, " __stringify(THEAD_C9XX_CSR_VXSAT) "\n\t"
++		"or	%3, %3, t4\n\t"
++		"csrc	sstatus, t1\n\t",
++		THEAD_VENDOR_ID,
++		ERRATA_THEAD_VECTOR, CONFIG_ERRATA_THEAD_VECTOR)
+ 		: "=r" (dest->vstart), "=r" (dest->vtype), "=r" (dest->vl),
+-		  "=r" (dest->vcsr), "=r" (dest->vlenb) : :);
++		  "=r" (dest->vcsr), "=r" (dest->vlenb) : "r"(t1) : "t4");
+ }
+ 
+ static __always_inline void __vstate_csr_restore(struct __riscv_v_ext_state *src)
+ {
+-	asm volatile (
++	register u32 t1 asm("t1") = (SR_FS);
++
++	asm volatile (ALTERNATIVE(
+ 		".option push\n\t"
+ 		".option arch, +v\n\t"
+ 		"vsetvl	 x0, %2, %1\n\t"
+ 		".option pop\n\t"
+ 		"csrw	" __stringify(CSR_VSTART) ", %0\n\t"
+ 		"csrw	" __stringify(CSR_VCSR) ", %3\n\t"
++		__nops(6),
++		"csrs	sstatus, t1\n\t"
++		".option push\n\t"
++		".option arch, +v\n\t"
++		"vsetvl	 x0, %2, %1\n\t"
++		".option pop\n\t"
++		"csrw	" __stringify(CSR_VSTART) ", %0\n\t"
++		"srliw	t4, %3, " __stringify(VCSR_VXRM_SHIFT) "\n\t"
++		"andi	t4, t4, " __stringify(VCSR_VXRM_MASK) "\n\t"
++		"csrw	" __stringify(THEAD_C9XX_CSR_VXRM) ", t4\n\t"
++		"andi	%3, %3, " __stringify(VCSR_VXSAT_MASK) "\n\t"
++		"csrw	" __stringify(THEAD_C9XX_CSR_VXSAT) ", %3\n\t"
++		"csrc	sstatus, t1\n\t",
++		THEAD_VENDOR_ID,
++		ERRATA_THEAD_VECTOR, CONFIG_ERRATA_THEAD_VECTOR)
+ 		: : "r" (src->vstart), "r" (src->vtype), "r" (src->vl),
+-		    "r" (src->vcsr) :);
++		    "r" (src->vcsr), "r"(t1) : "t4");
+ }
+ 
+ static inline void __riscv_v_vstate_save(struct __riscv_v_ext_state *save_to,
+@@ -95,7 +151,8 @@ static inline void __riscv_v_vstate_save
+ 
+ 	riscv_v_enable();
+ 	__vstate_csr_save(save_to);
+-	asm volatile (
++	asm volatile (ALTERNATIVE(
++		"nop\n\t"
+ 		".option push\n\t"
+ 		".option arch, +v\n\t"
+ 		"vsetvli	%0, x0, e8, m8, ta, ma\n\t"
+@@ -106,8 +163,18 @@ static inline void __riscv_v_vstate_save
+ 		"vse8.v		v16, (%1)\n\t"
+ 		"add		%1, %1, %0\n\t"
+ 		"vse8.v		v24, (%1)\n\t"
+-		".option pop\n\t"
+-		: "=&r" (vl) : "r" (datap) : "memory");
++		".option pop\n\t",
++		"mv		t0, %1\n\t"
++		THEAD_VSETVLI_T4X0E8M8D1
++		THEAD_VSB_V_V0T0
++		"addi		t0, t0, 128\n\t"
++		THEAD_VSB_V_V8T0
++		"addi		t0, t0, 128\n\t"
++		THEAD_VSB_V_V16T0
++		"addi		t0, t0, 128\n\t"
++		THEAD_VSB_V_V24T0, THEAD_VENDOR_ID,
++		ERRATA_THEAD_VECTOR, CONFIG_ERRATA_THEAD_VECTOR)
++		: "=&r" (vl) : "r" (datap) : "t0", "t4", "memory");
+ 	riscv_v_disable();
+ }
+ 
+@@ -117,7 +184,8 @@ static inline void __riscv_v_vstate_rest
+ 	unsigned long vl;
+ 
+ 	riscv_v_enable();
+-	asm volatile (
++	asm volatile (ALTERNATIVE(
++		"nop\n\t"
+ 		".option push\n\t"
+ 		".option arch, +v\n\t"
+ 		"vsetvli	%0, x0, e8, m8, ta, ma\n\t"
+@@ -128,8 +196,18 @@ static inline void __riscv_v_vstate_rest
+ 		"vle8.v		v16, (%1)\n\t"
+ 		"add		%1, %1, %0\n\t"
+ 		"vle8.v		v24, (%1)\n\t"
+-		".option pop\n\t"
+-		: "=&r" (vl) : "r" (datap) : "memory");
++		".option pop\n\t",
++		"mv		t0, %1\n\t"
++		THEAD_VSETVLI_T4X0E8M8D1
++		THEAD_VLB_V_V0T0
++		"addi		t0, t0, 128\n\t"
++		THEAD_VLB_V_V8T0
++		"addi		t0, t0, 128\n\t"
++		THEAD_VLB_V_V16T0
++		"addi		t0, t0, 128\n\t"
++		THEAD_VLB_V_V24T0, THEAD_VENDOR_ID,
++		ERRATA_THEAD_VECTOR, CONFIG_ERRATA_THEAD_VECTOR)
++		: "=&r" (vl) : "r" (datap) : "t0", "t4", "memory");
+ 	__vstate_csr_restore(restore_from);
+ 	riscv_v_disable();
+ }
+@@ -139,7 +217,7 @@ static inline void __riscv_v_vstate_disc
+ 	unsigned long vl, vtype_inval = 1UL << (BITS_PER_LONG - 1);
+ 
+ 	riscv_v_enable();
+-	asm volatile (
++	asm volatile (ALTERNATIVE(
+ 		".option push\n\t"
+ 		".option arch, +v\n\t"
+ 		"vsetvli	%0, x0, e8, m8, ta, ma\n\t"
+@@ -148,14 +226,21 @@ static inline void __riscv_v_vstate_disc
+ 		"vmv.v.i	v16, -1\n\t"
+ 		"vmv.v.i	v24, -1\n\t"
+ 		"vsetvl		%0, x0, %1\n\t"
+-		".option pop\n\t"
++		".option pop\n\t",
++		/* FIXME: Do real vstate discard as above! */
++		__nops(6), THEAD_VENDOR_ID,
++		ERRATA_THEAD_VECTOR, CONFIG_ERRATA_THEAD_VECTOR)
+ 		: "=&r" (vl) : "r" (vtype_inval) : "memory");
+ 	riscv_v_disable();
+ }
+ 
+ static inline void riscv_v_vstate_discard(struct pt_regs *regs)
+ {
+-	if ((regs->status & SR_VS) == SR_VS_OFF)
++	unsigned long sr_vs;
++
++	ALT_SR_VS(sr_vs, SR_VS);
++
++	if ((regs->status & sr_vs) == SR_VS_OFF)
+ 		return;
+ 
+ 	__riscv_v_vstate_discard();
+@@ -165,7 +250,12 @@ static inline void riscv_v_vstate_discar
+ static inline void riscv_v_vstate_save(struct task_struct *task,
+ 				       struct pt_regs *regs)
+ {
+-	if ((regs->status & SR_VS) == SR_VS_DIRTY) {
++	unsigned long sr_vs, sr_vs_dirty;
++
++	ALT_SR_VS(sr_vs, SR_VS);
++	ALT_SR_VS(sr_vs_dirty, SR_VS_DIRTY);
++
++	if ((regs->status & sr_vs) == sr_vs_dirty) {
+ 		struct __riscv_v_ext_state *vstate = &task->thread.vstate;
+ 
+ 		__riscv_v_vstate_save(vstate, vstate->datap);
+@@ -176,7 +266,11 @@ static inline void riscv_v_vstate_save(s
+ static inline void riscv_v_vstate_restore(struct task_struct *task,
+ 					  struct pt_regs *regs)
+ {
+-	if ((regs->status & SR_VS) != SR_VS_OFF) {
++	unsigned long sr_vs;
++
++	ALT_SR_VS(sr_vs, SR_VS);
++
++	if ((regs->status & sr_vs) != SR_VS_OFF) {
+ 		struct __riscv_v_ext_state *vstate = &task->thread.vstate;
+ 
+ 		__riscv_v_vstate_restore(vstate, vstate->datap);
+--- a/arch/riscv/kernel/vector.c
++++ b/arch/riscv/kernel/vector.c
+@@ -18,6 +18,7 @@
+ #include <asm/csr.h>
+ #include <asm/elf.h>
+ #include <asm/ptrace.h>
++#include <asm/sbi.h>
+ #include <asm/bug.h>
+ 
+ static bool riscv_v_implicit_uacc = IS_ENABLED(CONFIG_RISCV_ISA_V_DEFAULT_ENABLE);
+@@ -29,6 +30,13 @@ int riscv_v_setup_vsize(void)
+ {
+ 	unsigned long this_vsize;
+ 
++	if (riscv_cached_mvendorid(0) == THEAD_VENDOR_ID &&
++	    riscv_cached_marchid(0) == 0 &&
++	    riscv_cached_mimpid(0) == 0) {
++		riscv_v_vsize = 128 / 8 * 32;
++		return 0;
++	}
++
+ 	/* There are 32 vector registers with vlenb length. */
+ 	riscv_v_enable();
+ 	this_vsize = csr_read(CSR_VLENB) * 32;

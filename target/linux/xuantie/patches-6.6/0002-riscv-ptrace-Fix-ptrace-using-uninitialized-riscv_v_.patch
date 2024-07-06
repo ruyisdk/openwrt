@@ -1,0 +1,68 @@
+From 3bc067fa4bf842189dc50eee0f30905e549f392d Mon Sep 17 00:00:00 2001
+From: Chen Pei <cp0613@linux.alibaba.com>
+Date: Sat, 29 Jun 2024 11:05:18 +0800
+Subject: [PATCH 002/129] riscv: ptrace: Fix ptrace using uninitialized
+ riscv_v_vsize
+
+The isa field of TH1520 (xuantie C910) does not contain v when using
+dts, and according to the merged upstream patch [1], v is not enabled
+for vector 0.7.1, which causes has_vector to return 0 during startup,
+riscv_v_setup_vsize cannot be executed, and riscv_v_vsize is not
+initialized.
+Currently, if an application without vector instructions coredumps and
+calls the ptrace process, it will cause kernel Oops, and the log is as
+follows:
+
+CPU: 0 PID: 252 Comm: test_coredump Not tainted 6.6.0-00262-ga07b498cc240
+Hardware name: Sipeed Lichee Pi 4A (DT)
+epc : __riscv_v_vstate_restore+0x1c/0x7a
+ ra : riscv_vr_get+0x21c/0x246
+epc : ffffffff800042ca ra : ffffffff80004e00 sp : ffffffc800a73820
+ gp : ffffffff8102f298 tp : ffffffd9022cbc00 t0 : 0000000000000010
+ t1 : ffffffff8106e300 t2 : 0000000000000000 s0 : ffffffc800a73830
+ s1 : ffffffd9022cbc00 a0 : ffffffd9022cc778 a1 : 0000000000000010
+ a2 : 0000000000000000 a3 : ffffffc800a70000 a4 : 8000000200804020
+ a5 : 0000000001800000 a6 : ffffffff80004be4 a7 : ffffffff80e64370
+ s2 : ffffffc800a73840 s3 : 0000000000040028 s4 : ffffffc800a74000
+ s5 : 0000000000800000 s6 : ffffffd902d00000 s7 : fffffffffe7fffff
+ s8 : ffffffc800a739b0 s9 : 0000000000000002 s10: ffffffff80ad2e10
+ s11: 0000000000000001 t3 : 0000000000000024 t4 : 0000000000000080
+ t5 : 0000000000000000 t6 : ffffffd900229b00
+status: 8000000201800120 badaddr: 0000000000000010 cause: 000000000000000d
+[<ffffffff800042ca>] __riscv_v_vstate_restore+0x1c/0x7a
+[<ffffffff80004e00>] riscv_vr_get+0x21c/0x246
+[<ffffffff8005c552>] __regset_get+0xac/0xe4
+[<ffffffff8005c5b6>] regset_get_alloc+0x10/0x18
+[<ffffffff80247384>] elf_core_dump+0x424/0xc18
+[<ffffffff8024eaee>] do_coredump+0xb96/0x10bc
+[<ffffffff80045d26>] get_signal+0x650/0x7cc
+[<ffffffff800054f8>] arch_do_signal_or_restart+0x4a/0x638
+[<ffffffff800a584c>] exit_to_user_mode_loop.isra.0+0x6a/0xb2
+[<ffffffff80a45ed6>] irqentry_exit_to_user_mode+0x1c/0x24
+[<ffffffff80a45f1e>] irqentry_exit+0x40/0x54
+[<ffffffff80a45bf8>] do_page_fault+0x2a/0x36
+[<ffffffff80003bbc>] ret_from_exception+0x0/0x64
+
+The reason is that riscv_v_thread_zalloc uses uninitialized riscv_v_vsize
+for kzalloc, which will return invalid datap, resulting in kernel access
+error. At this time, we only need to return failure.
+
+https://lore.kernel.org/all/20240223-tidings-shabby-607f086cb4d7@spud/ [1]
+
+Signed-off-by: Chen Pei <cp0613@linux.alibaba.com>
+---
+ arch/riscv/kernel/vector.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+--- a/arch/riscv/kernel/vector.c
++++ b/arch/riscv/kernel/vector.c
+@@ -91,7 +91,8 @@ static bool insn_is_vector(u32 insn_buf)
+ static int riscv_v_thread_zalloc(void)
+ {
+ 	void *datap;
+-
++	if (!riscv_v_vsize)
++		return -EINVAL;
+ 	datap = kzalloc(riscv_v_vsize, GFP_KERNEL);
+ 	if (!datap)
+ 		return -ENOMEM;

@@ -1,0 +1,21 @@
+From 8932a389344c90453052b0d73f349fc3661d100f Mon Sep 17 00:00:00 2001
+From: Xiangyi Zeng <xiangyi.zeng@linux.alibaba.com>
+Date: Tue, 28 May 2024 16:03:57 +0800
+Subject: [PATCH 057/129] drivers/iio/adc: add sysfs_remove_file when adc
+ driver removed
+
+Signed-off-by: Xiangyi Zeng <xiangyi.zeng@linux.alibaba.com>
+---
+ drivers/iio/adc/th1520-adc.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+--- a/drivers/iio/adc/th1520-adc.c
++++ b/drivers/iio/adc/th1520-adc.c
+@@ -505,6 +505,7 @@ static int th1520_adc_remove(struct plat
+ 	struct iio_dev *indio_dev = platform_get_drvdata(pdev);
+ 	struct th1520_adc *info = iio_priv(indio_dev);
+ 
++	sysfs_remove_file(&pdev->dev.kobj, &dev_attr_th1520_adc_res.attr);
+ 	iio_device_unregister(indio_dev);
+ 	regulator_disable(info->vref);
+ 	clk_disable_unprepare(info->clk);

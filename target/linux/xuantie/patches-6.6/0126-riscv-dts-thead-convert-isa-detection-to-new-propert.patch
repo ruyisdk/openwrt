@@ -1,0 +1,59 @@
+From 9bf7f1ff0b44c104618586b993ea5584d56b9477 Mon Sep 17 00:00:00 2001
+From: Conor Dooley <conor.dooley@microchip.com>
+Date: Sun, 22 Oct 2023 23:41:35 +0800
+Subject: [PATCH 126/129] riscv: dts: thead: convert isa detection to new
+ properties
+
+Convert the th1520 devicetrees to use the new properties
+"riscv,isa-base" & "riscv,isa-extensions".
+For compatibility with other projects, "riscv,isa" remains.
+
+Reviewed-by: Jisheng Zhang <jszhang@kernel.org>
+Acked-by: Guo Ren <guoren@kernel.org>
+Signed-off-by: Conor Dooley <conor.dooley@microchip.com>
+---
+ arch/riscv/boot/dts/thead/th1520.dtsi | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+--- a/arch/riscv/boot/dts/thead/th1520.dtsi
++++ b/arch/riscv/boot/dts/thead/th1520.dtsi
+@@ -30,6 +30,9 @@
+ 			compatible = "thead,c910", "riscv";
+ 			device_type = "cpu";
+ 			riscv,isa = "rv64imafdc";
++			riscv,isa-base = "rv64i";
++			riscv,isa-extensions = "i", "m", "a", "f", "d", "c", "zicntr", "zicsr",
++					       "zifencei", "zihpm";
+ 			reg = <0>;
+ 			i-cache-block-size = <64>;
+ 			i-cache-size = <65536>;
+@@ -61,6 +64,9 @@
+ 			compatible = "thead,c910", "riscv";
+ 			device_type = "cpu";
+ 			riscv,isa = "rv64imafdc";
++			riscv,isa-base = "rv64i";
++			riscv,isa-extensions = "i", "m", "a", "f", "d", "c", "zicntr", "zicsr",
++					       "zifencei", "zihpm";
+ 			reg = <1>;
+ 			i-cache-block-size = <64>;
+ 			i-cache-size = <65536>;
+@@ -92,6 +98,9 @@
+ 			compatible = "thead,c910", "riscv";
+ 			device_type = "cpu";
+ 			riscv,isa = "rv64imafdc";
++			riscv,isa-base = "rv64i";
++			riscv,isa-extensions = "i", "m", "a", "f", "d", "c", "zicntr", "zicsr",
++					       "zifencei", "zihpm";
+ 			reg = <2>;
+ 			i-cache-block-size = <64>;
+ 			i-cache-size = <65536>;
+@@ -123,6 +132,9 @@
+ 			compatible = "thead,c910", "riscv";
+ 			device_type = "cpu";
+ 			riscv,isa = "rv64imafdc";
++			riscv,isa-base = "rv64i";
++			riscv,isa-extensions = "i", "m", "a", "f", "d", "c", "zicntr", "zicsr",
++					       "zifencei", "zihpm";
+ 			reg = <3>;
+ 			i-cache-block-size = <64>;
+ 			i-cache-size = <65536>;

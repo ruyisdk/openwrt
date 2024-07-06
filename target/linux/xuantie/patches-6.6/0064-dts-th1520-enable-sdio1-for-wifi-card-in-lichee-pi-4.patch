@@ -1,0 +1,33 @@
+From 4b808544225935b4614a8b9aa7b40d92684e951b Mon Sep 17 00:00:00 2001
+From: xianbing Zhu <xianbing.zhu@linux.alibaba.com>
+Date: Fri, 31 May 2024 14:30:19 +0800
+Subject: [PATCH 064/129] dts: th1520: enable sdio1 for wifi card in
+ lichee-pi-4a
+
+This commit add wifi card sdio1 info in lichee-pi-4a dts.
+
+Signed-off-by: xianbing Zhu <xianbing.zhu@linux.alibaba.com>
+---
+ arch/riscv/boot/dts/thead/th1520-lichee-pi-4a.dts | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+--- a/arch/riscv/boot/dts/thead/th1520-lichee-pi-4a.dts
++++ b/arch/riscv/boot/dts/thead/th1520-lichee-pi-4a.dts
+@@ -475,3 +475,17 @@
+ 		spi-max-frequency = <50000000>;
+ 	};
+ };
++
++&sdio1 {
++		max-frequency = <100000000>;
++		bus-width = <4>;
++		no-sd;
++		no-mmc;
++		non-removable;
++		io_fixed_1v8;
++		post-power-on-delay-ms = <50>;
++		wprtn_ignore;
++		cap-sd-highspeed;
++		wakeup-source;
++		status = "okay";
++};

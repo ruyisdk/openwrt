@@ -1,0 +1,39 @@
+From 13caf29f809c7eebb6ec1402913bfd1f3d821e23 Mon Sep 17 00:00:00 2001
+From: Xiangyi Zeng <xiangyi.zeng@linux.alibaba.com>
+Date: Fri, 17 May 2024 17:30:57 +0800
+Subject: [PATCH 042/129] riscv: dts: thead: Add THEAD TH1520 ADC device node
+
+Signed-off-by: Xiangyi Zeng <xiangyi.zeng@linux.alibaba.com>
+---
+ arch/riscv/boot/dts/thead/th1520-lichee-pi-4a.dts |  4 ++++
+ arch/riscv/boot/dts/thead/th1520.dtsi             | 10 ++++++++++
+ 2 files changed, 14 insertions(+)
+
+--- a/arch/riscv/boot/dts/thead/th1520-lichee-pi-4a.dts
++++ b/arch/riscv/boot/dts/thead/th1520-lichee-pi-4a.dts
+@@ -410,3 +410,7 @@
+ 		vbus-supply = <&vcc5v_usb>;
+ 	};
+ };
++
++&adc {
++	status = "okay";
++};
+--- a/arch/riscv/boot/dts/thead/th1520.dtsi
++++ b/arch/riscv/boot/dts/thead/th1520.dtsi
+@@ -747,5 +747,15 @@
+ 				interrupts = <55 IRQ_TYPE_LEVEL_HIGH>;
+ 			};
+ 		};
++
++		adc: adc@0xfffff51000 {
++			compatible = "thead,th1520-adc";
++			reg = <0xff 0xfff51000 0x0 0x1000>;
++			interrupts = <61 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&aonsys_clk>;
++			clock-names = "adc";
++			/* ADC pin is proprietary,no need to config pinctrl */
++			status = "disabled";
++		};
+ 	};
+ };

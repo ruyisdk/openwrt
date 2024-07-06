@@ -1,0 +1,44 @@
+From 0dae183afd691a76ee683a521703ebb95ff24bc5 Mon Sep 17 00:00:00 2001
+From: Han Gao <gaohan@iscas.ac.cn>
+Date: Wed, 27 Mar 2024 23:56:04 +0800
+Subject: [PATCH 124/129] riscv: xtheadvector: enable vector function
+
+Signed-off-by: Han Gao <gaohan@iscas.ac.cn>
+---
+ arch/riscv/include/asm/hwcap.h  | 1 +
+ arch/riscv/include/asm/vector.h | 3 ++-
+ arch/riscv/kernel/cpufeature.c  | 1 +
+ 3 files changed, 4 insertions(+), 1 deletion(-)
+
+--- a/arch/riscv/include/asm/hwcap.h
++++ b/arch/riscv/include/asm/hwcap.h
+@@ -58,6 +58,7 @@
+ #define RISCV_ISA_EXT_ZICSR		40
+ #define RISCV_ISA_EXT_ZIFENCEI		41
+ #define RISCV_ISA_EXT_ZIHPM		42
++#define RISCV_ISA_EXT_XTHEADVECTOR	43
+ 
+ #define RISCV_ISA_EXT_MAX		64
+ 
+--- a/arch/riscv/include/asm/vector.h
++++ b/arch/riscv/include/asm/vector.h
+@@ -26,7 +26,8 @@ bool riscv_v_first_use_handler(struct pt
+ 
+ static __always_inline bool has_vector(void)
+ {
+-	return riscv_has_extension_unlikely(RISCV_ISA_EXT_v);
++	return riscv_has_extension_unlikely(RISCV_ISA_EXT_v) ||
++	  riscv_has_extension_unlikely(RISCV_ISA_EXT_XTHEADVECTOR);
+ }
+ 
+ static inline void __riscv_v_vstate_clean(struct pt_regs *regs)
+--- a/arch/riscv/kernel/cpufeature.c
++++ b/arch/riscv/kernel/cpufeature.c
+@@ -182,6 +182,7 @@ const struct riscv_isa_ext_data riscv_is
+ 	__RISCV_ISA_EXT_DATA(svinval, RISCV_ISA_EXT_SVINVAL),
+ 	__RISCV_ISA_EXT_DATA(svnapot, RISCV_ISA_EXT_SVNAPOT),
+ 	__RISCV_ISA_EXT_DATA(svpbmt, RISCV_ISA_EXT_SVPBMT),
++	__RISCV_ISA_EXT_DATA(xtheadvector, RISCV_ISA_EXT_XTHEADVECTOR),
+ };
+ 
+ const size_t riscv_isa_ext_count = ARRAY_SIZE(riscv_isa_ext);

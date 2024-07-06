@@ -1,0 +1,30 @@
+From 59a2434e76e56682e1b4fca05d0b984dbfa7ecf5 Mon Sep 17 00:00:00 2001
+From: Xiangyi Zeng <xiangyi.zeng@linux.alibaba.com>
+Date: Mon, 17 Jun 2024 15:56:05 +0800
+Subject: [PATCH 102/129] riscv:dts: fix the aon gpio range configuration error
+
+Signed-off-by: Xiangyi Zeng <xiangyi.zeng@linux.alibaba.com>
+---
+ arch/riscv/boot/dts/thead/th1520.dtsi | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+--- a/arch/riscv/boot/dts/thead/th1520.dtsi
++++ b/arch/riscv/boot/dts/thead/th1520.dtsi
+@@ -925,7 +925,7 @@
+ 				gpio-controller;
+ 				#gpio-cells = <2>;
+ 				ngpios = <23>;
+-				gpio-ranges = <&padctrl_aosys 0 25 22>, <&padctrl_aosys 22 7 1>;
++				gpio-ranges = <&padctrl_aosys 0 9 16>;
+ 				reg = <0>;
+ 				interrupt-controller;
+ 				#interrupt-cells = <2>;
+@@ -965,7 +965,7 @@
+ 				gpio-controller;
+ 				#gpio-cells = <2>;
+ 				ngpios = <16>;
+-				gpio-ranges = <&padctrl_aosys 0 9 16>;
++				gpio-ranges = <&padctrl_aosys 0 25 22>, <&padctrl_aosys 22 7 1>;
+ 				reg = <0>;
+ 				interrupt-controller;
+ 				#interrupt-cells = <2>;
