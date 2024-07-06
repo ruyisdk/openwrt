@@ -13,10 +13,11 @@ define Image/BuildKernel
 
 	mkdir -p $@.boot/extlinux
 	$(CP) extlinux.conf $@.boot/extlinux/extlinux.conf
-	$(CP) fw_dynamic.bin $@.boot/fw_dynamic.bin
-	$(CP) light_aon_fpga.bin $@.boot/light_aon_fpga.bin
-	$(CP) light_c906_audio.bin $@.boot/light_c906_audio.bin
-	$(CP) str.bin $@.boot/str.bin
+	
+	$(CP) $(STAGING_DIR_IMAGE)/th1520-fw_dynamic.bin $@.boot/fw_dynamic.bin
+	$(CP) $(STAGING_DIR_IMAGE)/th1520-light_aon_fpga.bin $@.boot/light_aon_fpga.bin
+	$(CP) $(STAGING_DIR_IMAGE)/th1520-light_c906_audio.bin $@.boot/light_c906_audio.bin
+	$(CP) $(STAGING_DIR_IMAGE)/th1520-str.bin $@.boot/str.bin
 
 	rm -f $(KDIR)/boot.ext4
 	mkfs.ext4 -d $@.boot -L "boot" $(KDIR)/boot.ext4 "57M"
